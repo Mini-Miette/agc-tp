@@ -86,23 +86,60 @@ def read_fasta(amplicon_file, minseqlen):
     iterator
         An iterator operating on reads
     """
+    # Version Bénédicte mais ne prend pas la dernière séquence.
     with gzip.open(amplicon_file, 'rt') as my_file:
+
         activeone = False
         sequence = ''
         for line in my_file:
             if str(line).startswith(">"):
-                if activeone:
-                    activeone = False
+                if activeone and len(sequence) >= minseqlen:
+                    yield sequence
                 else:
-                    line = next(my_file, None)
-                    sequence = str(line).strip()
                     activeone = True
+                line = next(my_file, None)
+                sequence = str(line).strip()
             else:
-                if activeone:
-                    sequence += str(line).strip()
-                else:
-                    if len(sequence) >= minseqlen:
-                        yield sequence
+                sequence += str(line).strip()
+
+# =============================================================================
+#         for line in my_file:
+#             sequence = ''
+#             while line[0] != '>':
+#                 sequence += line
+#                 line = next(my_file, None)
+#             if len(sequence) >= minseqlen:
+#                 print(sequence)
+#                 yield sequence
+# =============================================================================
+
+# =============================================================================
+#         for line in my_file:
+#             if line[0] != '>' and len(line) >= minseqlen:
+#                 yield line
+#
+# =============================================================================
+
+
+# =============================================================================
+# # Version Bénédicte mais trop de séquences (59)
+#         activeone = False
+#         sequence = ''
+#         for line in my_file:
+#             if str(line).startswith(">"):
+#                 if activeone:
+#                     activeone = False
+#                 else:
+#                     line = next(my_file, None)
+#                     sequence = str(line).strip()
+#                     activeone = True
+#             else:
+#                 if activeone:
+#                     sequence += str(line).strip()
+#                 else:
+#                     if len(sequence) >= minseqlen:
+#                         yield sequence
+# =============================================================================
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
@@ -178,31 +215,49 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
                                 chunk_size, kmer_size):
-    """ Perform an abundance greedy clustering on a sequences file.
-    Algorithm:
-    Initial n groups ordered in particular way
-    Each step:
-        Pick a group and compare to the reference
-        If close to the reference:
-            Add in reference cluster
-        Otherwise:
-            Add it as a reference
+    """Perform an abundance greedy clustering on a sequences file.
+
+    Args:
+        amplicon_file (str): Path to gz.fastq file.
+        minseqlen (int): Minimum sequence length accepted.
+        mincount (int): Minimun sequence occurrency accepted.
+        chunk_size (int): Size of the chunks to be considered.
+        kmer_size (int): Size of the k-mers to be considered.
+
+    Returns:
+        otu_list (list(str, int)): List of OTUs and their respective number
+                                   of occurences.
+
     """
-
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    reference = next(reader, None)  # The one with the most abundance.
+    matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                               "MATCH"))
+    otu_list = []
 
-    for seq, count in reader:
+    # We initialise with the sequence with the most abundance.
+    otu_list.append(next(reader, None))
 
-        # First we align the sequences.
-        matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                                   "MATCH"))
-        align = nw.global_align(reference[0], seq, gap_open=-1, gap_extend=-1,
-                                matrix=matrix_file)
+    for element in reader:
+        # print(element)
+        identities = []
+        for otu in otu_list:
 
-        # Then we compute the identity.
-        identity = get_identity(align)
-        print(identity)
+            # First we align the sequences.
+            align = nw.global_align(otu[0], element[0], gap_open=-1,
+                                    gap_extend=-1,
+                                    matrix=matrix_file)
+            # Then we compute the identity.
+            identities.append(get_identity(align))
+
+        # If the sequence is less than 97% identical to all the others,
+        # we have found a new OTU.
+        # print(identities)
+        if all([identity <= 97 for identity in identities]):
+            #print('on ajoute')
+            otu_list.append(element)
+
+    # print(otu_list)
+    return otu_list
 
 
 def fill(text, width=80):
@@ -254,11 +309,13 @@ def main():
 #     reader = read_fasta(amplicon_file, 1)
 #     cpt = 0
 #     for seq in reader:
+#         # print(seq)
 #         cpt += 1
+#         # print('--')
 #     print(cpt)
 # =============================================================================
 
-    abundance_greedy_clustering(amplicon_file, 200, 3, chunk_size, kmer_size)
+    abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
 
 # =============================================================================
 #     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
