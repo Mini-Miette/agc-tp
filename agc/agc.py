@@ -78,6 +78,7 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
 
 
 def get_unique(ids):
+    print("hello world")
     return {}.fromkeys(ids).keys()
 
 

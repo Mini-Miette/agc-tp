@@ -1,0 +1,16 @@
+name: agc-tp
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9.7
+  - pip
+  # for nwalign3 compilation
+  - gcc=11.2.0
+  - cython=0.29.24
+  # required for TP
+  - pytest
+  - pylint
+  - pytest-cov
+  - pip:
+    - nwalign3==0.1.2
