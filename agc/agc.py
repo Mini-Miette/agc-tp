@@ -77,7 +77,34 @@ def read_fasta(amplicon_file, minseqlen):
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
-    pass
+    """Dereplicate an amplicon file.
+
+    Args:
+        amplicon_file (str): Path of the amplicon file.
+        minseqlen (int): Minimum sequence length accepted.
+        mincount (int): Minimun sequence occurrency accepted.
+
+    Yields:
+        key (str): Sequence.
+        int: Number of occurrences of the sequence.
+
+    """
+    # Building the dictionary.
+    seq_dict = {}
+    fasta_reader = read_fasta(amplicon_file, minseqlen)
+    for seq in fasta_reader:
+        if seq in seq_dict:
+            seq_dict[seq] += 1
+        else:
+            seq_dict[seq] = 1
+    fasta_reader.close()
+
+    # Yielding (sequence, count) in decreasing count order.
+    for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
+        if seq_dict[key] >= mincount:
+            yield (key, seq_dict[key])
+        else:
+            break  # No need to iterate throught the rest since it's ordered.
 
 
 def get_unique(ids):
