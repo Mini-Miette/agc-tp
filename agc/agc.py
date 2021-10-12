@@ -210,7 +210,28 @@ def get_identity(alignment_list):
 
 
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+
+    reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
+    non_chimeras = []
+    # Les 2 premières séquences sont par défaut définies comme non chimériques
+    # donc on saute à la troisième séquence directement.
+    non_chimeras.append(next(reader, None))
+    non_chimeras.append(next(reader, None))
+
+    for element in reader:
+
+        # Splitting the sequence in 4 non overlaping segments.
+        current_segments = get_chunks(element[0], chunk_size)
+
+        for nc_element in non_chimeras:
+            nc_segments = get_chunks(nc_element[0], chunk_size)
+            for seg, nc_seg in zip(current_segments, nc_segments):
+
+                pass
+            # Pour chaque segment
+            # identifierez les séquences non-chimériques présentant
+            # le plus grand nombre de k-mer similaires avec la séquence
+            # courante.
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
