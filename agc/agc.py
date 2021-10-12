@@ -91,14 +91,18 @@ def read_fasta(amplicon_file, minseqlen):
         sequence = ''
         for line in my_file:
             if str(line).startswith(">"):
-                if activeone and len(sequence) >= minseqlen:
-                    yield sequence
+                if activeone:
+                    activeone = False
                 else:
+                    line = next(my_file, None)
+                    sequence = str(line).strip()
                     activeone = True
-                line = next(my_file, None)
-                sequence = str(line).strip()
             else:
-                sequence += str(line).strip()
+                if activeone:
+                    sequence += str(line).strip()
+                else:
+                    if len(sequence) >= minseqlen:
+                        yield sequence
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
@@ -207,6 +211,15 @@ def fill(text, width=80):
 
 
 def write_OTU(OTU_list, output_file):
+    """Write OTUs in a file following fastas format.
+
+    Args:
+        OTU_list (list(str)): lists of identified OTU.
+        output_file (str): path of out file.
+
+    Yields:
+        None.
+    """
     pass
 
 # ==============================================================
