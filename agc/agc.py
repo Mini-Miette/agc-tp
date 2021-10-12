@@ -101,6 +101,8 @@ def read_fasta(amplicon_file, minseqlen):
                 sequence = str(line).strip()
             else:
                 sequence += str(line).strip()
+        if activeone and len(sequence) >= minseqlen:
+            yield sequence
 
 # =============================================================================
 #         for line in my_file:
