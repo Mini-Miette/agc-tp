@@ -13,12 +13,12 @@
 
 """OTU clustering"""
 
+from collections import Counter
 import argparse
 import sys
 import os
 import gzip
 import statistics
-from collections import Counter
 # https://github.com/briney/nwalign3
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
@@ -73,7 +73,31 @@ def get_arguments():
 
 
 def read_fasta(amplicon_file, minseqlen):
-    pass
+    """Read gz fasta file and get sequences one at a time.
+
+    Parameters
+    ----------
+    fastq_file: string
+        Path to gz.fastq file, identifier starts with ">" while
+        sequences may be writtent on one or several lines.
+
+    Returns
+    -------
+    iterator
+        An iterator operating on reads
+    """
+    with gzip.open(amplicon_file, 'rt') as my_file:
+        activeone =  False
+        for line in my_file:
+            if str(line).startswith(">"):
+                if activeone and len(sequence) >= minseqlen:
+                    yield sequence
+                else:
+                    activeone = True
+                line = next(my_file, None)
+                sequence = str(line).strip()
+            else:
+                sequence += str(line).strip()
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
