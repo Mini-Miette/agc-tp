@@ -195,7 +195,10 @@ def write_OTU(OTU_list, output_file):
     Yields:
         None.
     """
-    pass
+    with open(output_file, 'wt') as my_out_file:
+        for i, sequence in enumerate(OTU_list):
+            my_out_file.write(f">OTU_{i+1} occurrence:{sequence[1]}\n")
+            my_out_file.write(fill(sequence[0])+"\n")
 
 # ==============================================================
 # Main program
