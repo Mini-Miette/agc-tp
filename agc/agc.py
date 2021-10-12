@@ -87,7 +87,8 @@ def read_fasta(amplicon_file, minseqlen):
         An iterator operating on reads
     """
     with gzip.open(amplicon_file, 'rt') as my_file:
-        activeone =  False
+        activeone = False
+        sequence = ''
         for line in my_file:
             if str(line).startswith(">"):
                 if activeone and len(sequence) >= minseqlen:
@@ -121,7 +122,7 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
             seq_dict[seq] += 1
         else:
             seq_dict[seq] = 1
-    fasta_reader.close()
+    # print(seq_dict)
 
     # Yielding (sequence, count) in decreasing count order.
     for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
@@ -171,8 +172,33 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     pass
 
 
-def abundance_greedy_clustering(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
+                                chunk_size, kmer_size):
+    """ Perform an abundance greedy clustering on a sequences file.
+    Algorithm:
+    Initial n groups ordered in particular way
+    Each step:
+        Pick a group and compare to the reference
+        If close to the reference:
+            Add in reference cluster
+        Otherwise:
+            Add it as a reference
+    """
+
+    reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
+    reference = next(reader, None)  # The one with the most abundance.
+
+    for seq, count in reader:
+
+        # First we align the sequences.
+        matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                   "MATCH"))
+        align = nw.global_align(reference[0], seq, gap_open=-1, gap_extend=-1,
+                                matrix=matrix_file)
+
+        # Then we compute the identity.
+        identity = get_identity(align)
+        print(identity)
 
 
 def fill(text, width=80):
@@ -210,6 +236,35 @@ def main():
         chunk_size = 100
         kmer_size = 8
         output_file = '/home/sdv/m2bi/lxenard/Documents/Omiques/Métagénomique/agc-tp/output/test_output.txt'
+
+# =============================================================================
+#     reader = read_fasta(amplicon_file, 1)
+#     cpt = 0
+#     for seq in reader:
+#         cpt += 1
+#     print(cpt)
+# =============================================================================
+
+    abundance_greedy_clustering(amplicon_file, 200, 3, chunk_size, kmer_size)
+
+# =============================================================================
+#     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
+#     derep_1 = next(dereplication_reader)
+#     derep_2 = next(dereplication_reader)
+#     # Should be the most abundant sequence: seq4 counted 5 times
+#     assert(derep_1[0] == "ACTACGGGGCGCAGCAGTAGGGAATCTTCCGCAATGGACGAAAGTCTGACGGAGCAACGCCGCGTGTATGAAGAAGGTTTTCGGATCGTAAAGTACTGTTGTTAGAGAAGAACAAGGATAAGAGTAACTGCTTGTCCCTTGACGGTATCTAACCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTGTCCGGAGTTAGTGGGCGTAAAGCGCGCGCAGGCGGTCTTTTAAGTCTGATGTCAAAGCCCCCGGCTTAACCGGGGAGGGTCATTGGAAACTGGAAGACTGGAGTGCAGAAGAGGAGAGTGGAATTCCACGTGTAGCGGTGAAATGCGTAGATATGTGGAGGAACACCAGTGGCGAAGGCGACTCTCTGGTCTGTAACTGACGCTGAGGCGCGAAAGCGTGGGGAGCAAA")
+#     assert(derep_1[1] == 5)
+#     # Should be the second most abundant sequence: seq3 counted 4 times
+#     assert(derep_2[0] == "TAGGGAATCTTCCGCAATGGGCGAAAGCCTGACGGAGCAACGCCGCGTGAGTGATGAAGGTCTTCGGATCGTAAAACTCTGTTATTAGGGAAGAACATATGTGTAAGTAACTGTGCACATCTTGACGGTACCTAATCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTATCCGGAATTATTGGGCGTACAGCGCG")
+#     assert(derep_2[1] == 4)
+#     try:
+#         derep_3 = next(dereplication_reader)
+#         # derep_3 should be empty
+#         assert(len(derep_3) == 0)
+#     except StopIteration:
+#         # Congrats only two sequences to detect
+#         assert(True)
+# =============================================================================
 
 
 if __name__ == '__main__':
