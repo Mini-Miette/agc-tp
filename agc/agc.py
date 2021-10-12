@@ -33,6 +33,9 @@ __email__ = "laura.xenard@protonmail.com"
 __status__ = "Developpement"
 
 
+parse = False
+
+
 def isfile(path):
     """Check if path is an existing file.
       :Parameters:
@@ -137,9 +140,24 @@ def main():
     """
     Main program function
     """
-    # Get arguments
-    args = get_arguments()
-    # Votre programme ici
+    if parse:
+        # Get arguments
+        args = get_arguments()
+        amplicon_file = args.amplicon_file
+        minseqlen = args.minseqlen
+        mincount = args.mincount
+        chunk_size = args.chunk_size
+        kmer_size = args.kmer_size
+        output_file = args.output_file
+        # Votre programme ici
+
+    else:
+        amplicon_file = '/home/sdv/m2bi/lxenard/Documents/Omiques/Métagénomique/agc-tp/tests/test_sequences.fasta.gz'
+        minseqlen = 400
+        mincount = 10
+        chunk_size = 100
+        kmer_size = 8
+        output_file = '/home/sdv/m2bi/lxenard/Documents/Omiques/Métagénomique/agc-tp/output/test_output.txt'
 
 
 if __name__ == '__main__':
