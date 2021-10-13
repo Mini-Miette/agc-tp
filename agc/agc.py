@@ -176,7 +176,6 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
 
 
 def get_unique(ids):
-    print("hello world")
     return {}.fromkeys(ids).keys()
 
 
@@ -201,6 +200,10 @@ def cut_kmer(sequence, kmer_size):
         yield sequence[i:i+kmer_size]
 
 
+def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
+    pass
+
+
 def get_identity(alignment_list):
     """Prend en une liste de séquences alignées au format ["SE-QUENCE1", "SE-QUENCE2"]
     Retourne le pourcentage d'identite entre les deux."""
@@ -212,28 +215,81 @@ def get_identity(alignment_list):
 
 
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
+    """Yield a generator of non chimeric sequences.
 
+    Args:
+        amplicon_file (str): Path of the amplicon file.
+        minseqlen (int): Minimum sequence length accepted.
+        mincount (int): Minimun sequence occurrency accepted.
+        chunk_size (int): Size of the sequence chunks.
+        kmer_size (int): Size of the k-mers to be considered.
+
+    Yields:
+        None.
+
+    """
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    non_chimeras = []
-    # Les 2 premières séquences sont par défaut définies comme non chimériques
-    # donc on saute à la troisième séquence directement.
+    non_chimeras = []  # Non chimeric sequences.
+    # The first 2 sequences are declared non chimeric by default. So we jump
+    # directly to the third one.
     non_chimeras.append(next(reader, None))
     non_chimeras.append(next(reader, None))
+    # We are going to build a k-mer dictionary making an inventory of all
+    # the non chimeric sequences k-mers.
+    # The dictionary needs to be initialized with those first sequences,
+    # then it will be updated each time a new non chimeric sequence is
+    # identified.
+    kmer_dict = get_unique_kmer({}, non_chimeras[0], 0, kmer_size)
+    kmer_dict = get_unique_kmer(kmer_dict, non_chimeras[1], 1, kmer_size)
 
-    for element in reader:
+    for current_seq, current_count in reader:
 
-        # Splitting the sequence in 4 non overlaping segments.
-        current_segments = get_chunks(element[0], chunk_size)
+        parents = []  # Parent sequences to the current sequence.
 
-        for nc_element in non_chimeras:
-            nc_segments = get_chunks(nc_element[0], chunk_size)
-            for seg, nc_seg in zip(current_segments, nc_segments):
+        # Splitting the sequence into 4 non overlaping segments.
+        current_segments = get_chunks(current_seq, chunk_size)
 
-                pass
-            # Pour chaque segment
-            # identifierez les séquences non-chimériques présentant
-            # le plus grand nombre de k-mer similaires avec la séquence
-            # courante.
+        # We want to compare each segment to the corresponding segment of
+        # the nc (non chimeric) sequences.
+        for nc_seq, nc_count in non_chimeras:
+            nc_segments = get_chunks(nc_seq, chunk_size)
+            for current_seg, nc_seg in zip(current_segments, nc_segments):
+
+                # We want to compare the k-mers of each segment so it's
+                # easier to first build a Counter to count the number
+                # of occurrencies of each k-mer in a segment.
+                current_seg_kmers_cnt = Counter()
+                kmer_reader = cut_kmer(current_seg, kmer_size)
+                for kmer in kmer_reader:
+                    current_seg_kmers_cnt[kmer] += 1
+                # We do the same for the non chimeric segment.
+                nc_seg_kmers_cnt = Counter()
+                kmer_reader = cut_kmer(nc_seg, kmer_size)
+                for kmer in kmer_reader:
+                    nc_seg_kmers_cnt[kmer] += 1
+
+                # How many identical k-mers do we have between the 2 segments?
+                # We look at the intersection between the 2 Counters.
+                shared_kmers = [key for key in current_seg_kmers_cnt
+                                if key in nc_seg_kmers_cnt]
+
+                if len(shared_kmers) > 1:
+                    # The segments share several k-mers. We have found a
+                    # parent sequence.
+                    parents.append((nc_seq, nc_count))
+                    break  # No need to check the other segments.
+                elif (len(shared_kmers) == 1
+                      and current_seg_kmers_cnt[shared_kmers[0]] > 1
+                      and nc_seg_kmers_cnt[shared_kmers[0]] > 1):
+                    # There's only one shared k-mer and it appears at least
+                    # twice in both segments. We have found a parent sequence.
+                    parents.append((nc_seq, nc_count))
+                    break  # No need to check the other segments.
+
+        # TODO: partie 3. et 4.
+
+
+    # Must yield (sequence, count)
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
@@ -324,12 +380,12 @@ def main():
         # Votre programme ici
 
     else:
-        amplicon_file = '/home/sdv/m2bi/lxenard/Documents/Omiques/Métagénomique/agc-tp/tests/test_sequences.fasta.gz'
+        amplicon_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/tests/test_sequences.fasta.gz'
         minseqlen = 400
         mincount = 10
         chunk_size = 100
         kmer_size = 8
-        output_file = '/home/sdv/m2bi/lxenard/Documents/Omiques/Métagénomique/agc-tp/output/test_output.txt'
+        output_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/output/test_output.txt'
 
 # =============================================================================
 #     reader = read_fasta(amplicon_file, 1)
@@ -341,7 +397,8 @@ def main():
 #     print(cpt)
 # =============================================================================
 
-    abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
+    #abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
+    chimera_removal(amplicon_file, 400, 1, chunk_size, kmer_size)
 
 # =============================================================================
 #     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
