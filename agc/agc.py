@@ -17,6 +17,8 @@ from collections import Counter
 import argparse
 import sys
 import os
+import numpy as np
+import math
 import gzip
 import statistics
 # https://github.com/briney/nwalign3
@@ -228,6 +230,8 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
         None.
 
     """
+    matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                               "MATCH"))
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
     non_chimeras = []  # Non chimeric sequences.
     # The first 2 sequences are declared non chimeric by default. So we jump
@@ -246,7 +250,7 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
 
         parents = []  # Parent sequences to the current sequence.
 
-        # Splitting the sequence into 4 non overlaping segments.
+        # Splitting the sequence into non overlaping segments.
         current_segments = get_chunks(current_seq, chunk_size)
 
         # We want to compare each segment to the corresponding segment of
@@ -286,7 +290,30 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
                     parents.append((nc_seq, nc_count))
                     break  # No need to check the other segments.
 
-        # TODO: partie 3. et 4.
+        if len(parents) >= 2:
+            # We use a np.array to hold all the identidy % between the
+            # current sequence and each parent sequence.
+            # The rows hold the sequences in the same order than the parents
+            # list. The columns are for the segments.
+            nb_segments = math.ceil(len(current_seq) / chunk_size)
+            identities = np.zeros((len(parents), nb_segments))
+
+            for i in range(len(parents)):
+                parent_segments = get_chunks(parents[i], chunk_size)
+                aligns = [nw.global_align(current_seg, parent_seg,
+                                          gap_open=-1, gap_extend=-1,
+                                          matrix=matrix_file)
+                          for current_seg, parent_seg
+                          in zip(current_segments, parent_segments)]
+                identities[i, :] = [get_identity(aligns)]
+
+                print(identities)
+
+        # TODO: partie 4.
+        # Vérifier si le cas où il n'y pas le même nombre de segments
+        # apparaît.
+
+
 
 
     # Must yield (sequence, count)
@@ -398,7 +425,7 @@ def main():
 # =============================================================================
 
     #abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
-    chimera_removal(amplicon_file, 400, 1, chunk_size, kmer_size)
+    chimera_removal(amplicon_file, 100, 1, 10, 4)
 
 # =============================================================================
 #     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
