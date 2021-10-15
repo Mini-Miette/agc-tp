@@ -106,7 +106,7 @@ def read_fasta(amplicon_file, minseqlen):
         if activeone and len(sequence) >= minseqlen:
             yield sequence
 
-# =============================================================================
+# ===================================================================
 #         for line in my_file:
 #             sequence = ''
 #             while line[0] != '>':
@@ -115,17 +115,16 @@ def read_fasta(amplicon_file, minseqlen):
 #             if len(sequence) >= minseqlen:
 #                 print(sequence)
 #                 yield sequence
-# =============================================================================
+# ===================================================================
 
-# =============================================================================
+# ===================================================================
 #         for line in my_file:
 #             if line[0] != '>' and len(line) >= minseqlen:
 #                 yield line
 #
-# =============================================================================
+# ===================================================================
 
-
-# =============================================================================
+# ===================================================================
 # # Version Bénédicte mais trop de séquences (59)
 #         activeone = False
 #         sequence = ''
@@ -143,7 +142,7 @@ def read_fasta(amplicon_file, minseqlen):
 #                 else:
 #                     if len(sequence) >= minseqlen:
 #                         yield sequence
-# =============================================================================
+# ===================================================================
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
@@ -174,7 +173,7 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
         if seq_dict[key] >= mincount:
             yield (key, seq_dict[key])
         else:
-            break  # No need to iterate throught the rest since it's ordered.
+            break  # No need to go throught the rest it's ordered.
 
 
 def get_unique(ids):
@@ -186,7 +185,8 @@ def common(lst1, lst2):
 
 
 def get_chunks(sequence, chunk_size):
-    """"""
+    """Retrieve chunks (fragments) of given size for input sequence.
+    """
     len_seq = len(sequence)
     if len_seq < chunk_size * 4:
         raise ValueError("Sequence length ({}) is too short to be splitted in 4"
@@ -202,10 +202,6 @@ def cut_kmer(sequence, kmer_size):
         yield sequence[i:i+kmer_size]
 
 
-def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
-    pass
-
-
 def get_identity(alignment_list):
     """Prend en une liste de séquences alignées au format ["SE-QUENCE1", "SE-QUENCE2"]
     Retourne le pourcentage d'identite entre les deux."""
@@ -214,6 +210,14 @@ def get_identity(alignment_list):
         if alignment_list[0][i] == alignment_list[1][i]:
             id_nu += 1
     return round(100.0 * id_nu / len(alignment_list[0]), 2)
+
+
+def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
+    pass
+
+
+def search_mates(kmer_dict, sequence, kmer_size):
+    pass
 
 
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
