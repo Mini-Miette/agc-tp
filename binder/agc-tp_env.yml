@@ -1,5 +1,6 @@
 name: agc-tp
 channels:
+  - bioconda
   - conda-forge
   - defaults
 dependencies:
@@ -12,5 +13,9 @@ dependencies:
   - pytest
   - pylint
   - pytest-cov
+  - vsearch
   - pip:
     - nwalign3==0.1.2
+# nwalign3 does not load each time I create env
+# I need to activate env and install it with
+# pip install nwalign3==0.1.2 
