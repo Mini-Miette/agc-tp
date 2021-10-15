@@ -17,13 +17,14 @@ from collections import Counter
 import argparse
 import sys
 import os
-import numpy as np
 import math
 import gzip
 import statistics
+import numpy as np
 # https://github.com/briney/nwalign3
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
+
 
 __author__ = "Bénédicte Noblet et Laura Xénard"
 __copyright__ = "Universite de Paris"
@@ -57,8 +58,8 @@ def get_arguments():
       Returns: An object that contains the arguments
     """
     # Parsing arguments
-    parser = argparse.ArgumentParser(description=__doc__, usage="{0} -h"
-                                     .format(sys.argv[0]))
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     usage=f"{sys.argv[0]} -h")
     parser.add_argument('-i', '-amplicon_file', dest='amplicon_file', type=isfile, required=True,
                         help="Amplicon is a compressed fasta file (.fasta.gz)")
     parser.add_argument('-s', '-minseqlen', dest='minseqlen', type=int, default=400,
@@ -177,10 +178,14 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
 
 
 def get_unique(ids):
+    """Create a empty dictionnary with non-redondant ids as keys.
+    """
     return {}.fromkeys(ids).keys()
 
 
 def common(lst1, lst2):
+    """Retrieve a list of all elements included in both lists.
+    """
     return list(set(lst1) & set(lst2))
 
 
@@ -189,8 +194,8 @@ def get_chunks(sequence, chunk_size):
     """
     len_seq = len(sequence)
     if len_seq < chunk_size * 4:
-        raise ValueError("Sequence length ({}) is too short to be splitted in 4"
-                         " chunk of size {}".format(len_seq, chunk_size))
+        raise ValueError(f"Sequence length ({len_seq}) is too short to be splitted in 4"
+                         f" chunks of size {chunk_size}")
     return [sequence[i:i+chunk_size]
             for i in range(0, len_seq, chunk_size)
             if i+chunk_size <= len_seq - 1]
@@ -248,6 +253,8 @@ def search_mates(kmer_dict, sequence, kmer_size):
 
 
 def detect_chimera(perc_identity_matrix):
+    """Detecting chimera sequences.
+    """
     pass
 
 
@@ -464,10 +471,22 @@ def main():
 #     derep_1 = next(dereplication_reader)
 #     derep_2 = next(dereplication_reader)
 #     # Should be the most abundant sequence: seq4 counted 5 times
-#     assert(derep_1[0] == "ACTACGGGGCGCAGCAGTAGGGAATCTTCCGCAATGGACGAAAGTCTGACGGAGCAACGCCGCGTGTATGAAGAAGGTTTTCGGATCGTAAAGTACTGTTGTTAGAGAAGAACAAGGATAAGAGTAACTGCTTGTCCCTTGACGGTATCTAACCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTGTCCGGAGTTAGTGGGCGTAAAGCGCGCGCAGGCGGTCTTTTAAGTCTGATGTCAAAGCCCCCGGCTTAACCGGGGAGGGTCATTGGAAACTGGAAGACTGGAGTGCAGAAGAGGAGAGTGGAATTCCACGTGTAGCGGTGAAATGCGTAGATATGTGGAGGAACACCAGTGGCGAAGGCGACTCTCTGGTCTGTAACTGACGCTGAGGCGCGAAAGCGTGGGGAGCAAA")
+#     expected = "ACTACGGGGCGCAGCAGTAGGGAATCTTCCGCAATGGACGAAAGTCTGACGGAGCAACG"
+#     expected += "CCGCGTGTATGAAGAAGGTTTTCGGATCGTAAAGTACTGTTGTTAGAGAAGAACAAGG"
+#     expected += "ATAAGAGTAACTGCTTGTCCCTTGACGGTATCTAACCAGAAAGCCACGGCTAACTACG"
+#     expected += "TGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTGTCCGGAGTTAGTGGGCGTAA"
+#     expected += "AGCGCGCGCAGGCGGTCTTTTAAGTCTGATGTCAAAGCCCCCGGCTTAACCGGGGAGG"
+#     expected += "GTCATTGGAAACTGGAAGACTGGAGTGCAGAAGAGGAGAGTGGAATTCCACGTGTAGC"
+#     expected += "GGGTGAAATGCTAGATATGTGGAGGAACACCAGTGGCGAAGGCGACTCTCTGGTCTGT"
+#     expected += "AAACTGACGCTGAGGCGCGAAGCGTGGGGAGCAAA"
+#     assert(derep_1[0] == expected)
 #     assert(derep_1[1] == 5)
 #     # Should be the second most abundant sequence: seq3 counted 4 times
-#     assert(derep_2[0] == "TAGGGAATCTTCCGCAATGGGCGAAAGCCTGACGGAGCAACGCCGCGTGAGTGATGAAGGTCTTCGGATCGTAAAACTCTGTTATTAGGGAAGAACATATGTGTAAGTAACTGTGCACATCTTGACGGTACCTAATCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTATCCGGAATTATTGGGCGTACAGCGCG")
+#     expected = "TAGGGAATCTTCCGCAATGGGCGAAAGCCTGACGGAGCAACGCCGCGTGAGTGATGAA"
+#     expected += "GGTCTTCGGATCGTAAAACTCTGTTATTAGGGAAGAACATATGTGTAAGTAACTGTG"
+#     expected += "CACATCTTGACGGTACCTAATCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCG"
+#     expected += "GTAATACGTAGGTGGCAAGCGTTATCCGGAATTATTGGGCGTACAGCGCG"
+#     assert(derep_2[0] == expected)
 #     assert(derep_2[1] == 4)
 #     try:
 #         derep_3 = next(dereplication_reader)
