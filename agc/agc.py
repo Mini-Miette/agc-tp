@@ -45,9 +45,9 @@ def isfile(path):
     """
     if not os.path.isfile(path):
         if os.path.isdir(path):
-            msg = "{0} is a directory".format(path)
+            msg = f"{path} is a directory"
         else:
-            msg = "{0} does not exist.".format(path)
+            msg = f"{path} does not exist."
         raise argparse.ArgumentTypeError(msg)
     return path
 
@@ -203,8 +203,11 @@ def cut_kmer(sequence, kmer_size):
 
 
 def get_identity(alignment_list):
-    """Prend en une liste de séquences alignées au format ["SE-QUENCE1", "SE-QUENCE2"]
-    Retourne le pourcentage d'identite entre les deux."""
+    """
+    Prend en entrée une liste de séquences alignées au format
+    ["SE-QUENCE1", "SE-QUENCE2"] et retourne le pourcentage
+    d'identité entre les deux.
+    """
     id_nu = 0
     for i in range(len(alignment_list[0])):
         if alignment_list[0][i] == alignment_list[1][i]:
@@ -213,10 +216,38 @@ def get_identity(alignment_list):
 
 
 def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
-    pass
+    """Update kmer_dict with sequences kmers.
+    DO NOT record multiple occurences (id_seq is added once).
+
+    Kmer_dict keys are kmers sequences while values storing a list
+    of sequences indices (id_seq) if this kmer can be found in
+    matching id_seq sequence.
+    """
+    for kmer in cut_kmer(sequence, kmer_size):
+        if kmer in kmer_dict:
+            if id_seq in kmer_dict[kmer]:
+                continue
+            kmer_dict[kmer].append(id_seq)
+        else:
+            kmer_dict[kmer] = [id_seq]
+    return kmer_dict
 
 
 def search_mates(kmer_dict, sequence, kmer_size):
+    """Identify 2 best matching reads for sequence.
+    Returns a list of 2 id_seq corresponding to reads that match
+    best with current studied sequence (here, a chunk).
+    """
+    allfound = []
+    for kmer in cut_kmer(sequence, kmer_size):
+        if kmer not in kmer_dict:
+            continue
+        allfound += kmer_dict[kmer]
+    mostones = Counter(allfound).most_common(2)
+    return [mostones[i][0] for i in range(2)]
+
+
+def detect_chimera(perc_identity_matrix):
     pass
 
 
