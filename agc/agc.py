@@ -254,8 +254,21 @@ def search_mates(kmer_dict, sequence, kmer_size):
 
 def detect_chimera(perc_identity_matrix):
     """Detecting chimera sequences.
+    Si l’écart type moyen des pourcentages d’identité des segments est supérieur à 5
+    et que 2 segments minimum de notre séquence montrent une similarité différente
+    à un des deux parents, nous identifierons cette séquence comme chimérique.
     """
-    pass
+    # Standard deviations mean is expected above 5.0
+    std_devs = [statistics.stdev(values) for values in perc_identity_matrix]
+    ident_std_enough = statistics.mean(std_devs) > 5
+
+    # Either [0,0,0,0] nor [1,1,1,1] are not wanted for below list, not chimeral reads
+    fragment_max_pos = [0 if values[0] == max(values) else 1
+                                       for values in perc_identity_matrix]
+    diff_segments = not (sum(fragment_max_pos) == 0 or sum(fragment_max_pos) == 4)
+
+    # final answer requires both boolean to be True
+    return ident_std_enough and diff_segments
 
 
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
