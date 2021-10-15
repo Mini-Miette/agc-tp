@@ -268,18 +268,18 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                "MATCH"))
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    non_chimeras = []  # Non chimeric sequences.
+    non_chimerics = []  # Non chimeric sequences.
     # The first 2 sequences are declared non chimeric by default. So we jump
     # directly to the third one.
-    non_chimeras.append(next(reader, None))
-    non_chimeras.append(next(reader, None))
+    non_chimerics.append(next(reader, None))
+    non_chimerics.append(next(reader, None))
     # We are going to build a k-mer dictionary making an inventory of all
     # the non chimeric sequences k-mers.
     # The dictionary needs to be initialized with those first sequences,
     # then it will be updated each time a new non chimeric sequence is
     # identified.
-    kmer_dict = get_unique_kmer({}, non_chimeras[0], 0, kmer_size)
-    kmer_dict = get_unique_kmer(kmer_dict, non_chimeras[1], 1, kmer_size)
+    kmer_dict = get_unique_kmer({}, non_chimerics[0], 0, kmer_size)
+    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[1], 1, kmer_size)
 
     for current_seq, current_count in reader:
 
@@ -290,7 +290,7 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
 
         # We want to compare each segment to the corresponding segment of
         # the nc (non chimeric) sequences.
-        for nc_seq, nc_count in non_chimeras:
+        for nc_seq, nc_count in non_chimerics:
             nc_segments = get_chunks(nc_seq, chunk_size)
             for current_seg, nc_seg in zip(current_segments, nc_segments):
 
@@ -328,10 +328,10 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
         if len(parents) >= 2:
             # We use a np.array to hold all the identidy % between the
             # current sequence and each parent sequence.
-            # The rows hold the sequences in the same order than the parents
-            # list. The columns are for the segments.
+            # The columns hold the sequences in the same order than the
+            # parents list. The rows hold the segments.
             nb_segments = math.ceil(len(current_seq) / chunk_size)
-            identities = np.zeros((len(parents), nb_segments))
+            identities = np.zeros((nb_segments, len(parents)))
 
             for i in range(len(parents)):
                 parent_segments = get_chunks(parents[i], chunk_size)
@@ -342,16 +342,13 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
                           in zip(current_segments, parent_segments)]
                 identities[i, :] = [get_identity(aligns)]
 
-                print(identities)
+        # Updating the list of non chimeric sequences.
+        is_chimeric = detect_chimera(identities)
+        if not is_chimeric:
+            non_chimerics.append((nc_seq, nc_count))
 
-        # TODO: partie 4.
-        # Vérifier si le cas où il n'y pas le même nombre de segments
-        # apparaît.
-
-
-
-
-    # Must yield (sequence, count)
+    for seq, count in non_chimerics:
+        yield (seq, count)
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
