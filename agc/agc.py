@@ -40,7 +40,6 @@ __status__ = "Developpement"
 
 parse = False
 
-
 def isfile(path):
     """Check if path is an existing file.
       :Parameters:
@@ -92,18 +91,13 @@ def read_fasta(amplicon_file, minseqlen):
         An iterator operating on reads
     """
 
-    global NB_SEQUENCES
-
     with gzip.open(amplicon_file, 'rt') as my_file:
-
-        NB_SEQUENCES = 0
 
         activeone = False
         sequence = ''
         for line in my_file:
             if str(line).startswith(">"):
                 if activeone and len(sequence) >= minseqlen:
-                    NB_SEQUENCES += 1
                     yield sequence
                 else:
                     activeone = True
@@ -112,7 +106,6 @@ def read_fasta(amplicon_file, minseqlen):
             else:
                 sequence += str(line).strip()
         if activeone and len(sequence) >= minseqlen:
-            NB_SEQUENCES += 1
             yield sequence
 
 
@@ -129,22 +122,32 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
         int: Number of occurrences of the sequence.
 
     """
+    global NB_SEQUENCES
+
     # Building the dictionary.
     seq_dict = {}
     fasta_reader = read_fasta(amplicon_file, minseqlen)
+    cpt_fasta_reader = 0
     for seq in fasta_reader:
+        cpt_fasta_reader += 1
         if seq in seq_dict:
             seq_dict[seq] += 1
         else:
             seq_dict[seq] = 1
-    # print(seq_dict)
+    print('cpt_fasta_reader:', cpt_fasta_reader)
+
+    NB_SEQUENCES = 0
+    for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
+        if seq_dict[key] >= mincount:
+            NB_SEQUENCES += 1
+    print('NB_SEQUENCES:', NB_SEQUENCES)
 
     # Yielding (sequence, count) in decreasing count order.
     for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
         if seq_dict[key] >= mincount:
             yield (key, seq_dict[key])
         else:
-            break  # No need to go throught the rest it's ordered.
+            break  # No need to go throught the rest since it's ordered.
 
 
 def get_unique(ids):
@@ -209,22 +212,6 @@ def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
     return kmer_dict
 
 
-# =============================================================================
-# def search_mates(kmer_dict, sequence, kmer_size):
-#     """Identify 2 best matching reads for sequence.
-#     Returns a list of 2 id_seq corresponding to reads that match
-#     best with current studied sequence (here, a chunk).
-#     """
-#     allfound = []
-#     for kmer in cut_kmer(sequence, kmer_size):
-#         if kmer not in kmer_dict:
-#             continue
-#         allfound += kmer_dict[kmer]
-#     mostones = Counter(allfound).most_common(2)
-#     print(mostones)
-#     return [mostones[i][0] for i in range(2)]
-# =============================================================================
-
 def search_mates(kmer_dict, sequence, kmer_size):
     """Identify 2 best matching reads for sequence.
     Returns a list of 2 id_seq corresponding to reads that match
@@ -234,11 +221,9 @@ def search_mates(kmer_dict, sequence, kmer_size):
     for kmer in cut_kmer(sequence, kmer_size):
         if kmer in kmer_dict:
             all_found += kmer_dict[kmer]
-            #print(all_found)
     best_mates = Counter(all_found).most_common(2)
     #print('best_mates:', best_mates)
-    # TODO: la liste est toujours vide... est-ce que c'est l'histoire de
-    # lancer search_mates sur la séquence plutôt que chunks...?
+
     return [seq_id for seq_id, count in best_mates]
 
 
@@ -280,42 +265,50 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                "MATCH"))
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
+
     non_chimerics = []  # Non chimeric sequences.
     # The first 2 sequences are declared non chimeric by default. So we jump
     # directly to the third one.
     non_chimerics.append(next(reader, None))
     non_chimerics.append(next(reader, None))
+    #print(len(non_chimerics))
     # We are going to build a k-mer dictionary making an inventory of all
     # the non chimeric sequences k-mers.
     # The dictionary needs to be initialized with those first sequences,
     # then it will be updated each time a new non chimeric sequence is
     # identified.
-    kmer_dict = get_unique_kmer({}, non_chimerics[0], 0, kmer_size)
-    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[1], 1, kmer_size)
+    kmer_dict = get_unique_kmer({}, non_chimerics[0][0], 0, kmer_size)
+    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[1][0], 1, kmer_size)
 
-    for current_seq, current_count in tqdm(reader, total=NB_SEQUENCES,
-                                           unit='seq'):
+    for current_seq, current_count in tqdm(reader, unit='seq',
+                                           total=NB_SEQUENCES):
+        #print(len(non_chimerics))
 
         parents = []  # Parent sequences to the current sequence.
 
         # Splitting the sequence into non overlaping segments.
         current_segments = get_chunks(current_seq, chunk_size)
 
-        # We want to compare each segment to the corresponding segment of
-        # the nc (non chimeric) sequences.
-        for nc_seq, nc_count in non_chimerics:
-            # TODO: normalement on peut supprimer les segments nc.
-            nc_segments = get_chunks(nc_seq, chunk_size)
-            for current_seg, nc_seg in zip(current_segments, nc_segments):
+        # Searching for the nc sequence that best matches the segment k-mers.
+        all_mates_seg = []
+        for current_seg in current_segments:
+            mates_seg = search_mates(kmer_dict, current_seg, kmer_size)
+            all_mates_seg.append(mates_seg)
+        #print(all_mates_seg)
 
-                best_mates = search_mates(kmer_dict, current_seg, kmer_size)
-                #print(len(best_mates))
+        # Identifying the nc sequences that mate with all segments.
+        common_mates = all_mates_seg[0]
+        for mates in all_mates_seg[1:]:
+            common_mates = common(common_mates, mates)
+        #print(common_mates)
 
-                if len(best_mates) == 2:
-                    # The segments share several k-mers. We have found a
-                    # parent sequence.
-                    parents.append((nc_seq, nc_count))
-                    break  # No need to check the other segments.
+        # The segment share several k-mers with nc sequences. We have
+        # found a parent sequence.
+        for mates in common_mates:
+            #print(mates)
+            #print(non_chimerics[mates])
+            parents.append(non_chimerics[mates])
+        #print(len(parents))
 
         if len(parents) >= 2:
             # We use a np.array to hold all the identidy % between the
@@ -338,13 +331,14 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
             # Updating the list of non chimeric sequences.
             is_chimeric = detect_chimera(identities)
             if not is_chimeric:
-                non_chimerics.append((nc_seq, nc_count))
+                non_chimerics.append((current_seq, current_count))
                 # And updating the k-mer dictionary.
-                kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[-1],
-                                            len(non_chimerics), kmer_size)
+                kmer_dict = get_unique_kmer(kmer_dict, current_seq,
+                                            len(non_chimerics)-1, kmer_size)
 
         for seq, count in non_chimerics:
             yield (seq, count)
+
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
