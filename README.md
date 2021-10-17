@@ -10,8 +10,20 @@ Pytest : \
 Exécution : \
 ![](/results/execution.png)
 
+Nous identifions de l'ordre de 100 OTUs dans l'échantillon proposé, contenant 8 espèces bactériennes en quantité d'ADN équivalente et 2 espèces de levure 6 fois moins représentées.
+
 vsearch : \
 ![](/results/vsearch.png)
+
+
+L'échantillon à l'origine des *reads* séquencés contenant seulement 10 espèces, nous nous sommes intéressées à réduire le pourcentage d'identité pour le regroupement des OTUS en cours d'algorithme.  
+La version modifiée du script (ajout d'un argument optionnel en plus) est consultable sur la branche `test-treshold_bene`, les fichiers de résultats sont présents dans la branche `master`. Exécution du programme en 8 minutes 26 secondes environ.
+
+vsearch identity treshold 95 : \
+![](/results/vsearch_treshold95.PNG)
+
+Le changement du pourcentage d'identité (de 97 à 95%, nomnbre d'OTUs du même ordre que la référence dans l'expérience de Kunin *et al.*, 2010) réduit le nombre d'OTUs identifiées à seulement 45 au lieu de 114.  
+Toutefois, une séquence demeure non reconnue dans le lot d'OTUs identifiées. Il peut s'agir d'une séquence contaminante lors de la préparation du mélange (autre espèce) ou à celle de la librairie de séquençage (préparateur).   
 
 
 ## Introduction
