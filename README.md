@@ -4,13 +4,13 @@ Vous trouverez la description complète du TP [ici](https://docs.google.com/docu
 
 ## Résultats
 
-Pytest :
+Pytest : \
 ![](/results/pytest.png)
 
-Exécution :
+Exécution : \
 ![](/results/execution.png)
 
-vsearch :
+vsearch : \
 ![](/results/vsearch.png)
 
 
