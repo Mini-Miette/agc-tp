@@ -74,6 +74,9 @@ def get_arguments():
                         help="kmer size for dereplication  (default 10)")
     parser.add_argument('-o', '-output_file', dest='output_file',
                         type=str, default="OTU.fasta", help="Output file")
+    parser.add_argument('-t', '-identity_treshold', dest='identity_treshold',
+                        type=int, default=97,
+                        help="percentage of identity for clusterization (default 97)")
     return parser.parse_args()
 
 
@@ -375,7 +378,7 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
-                                chunk_size, kmer_size):
+                                chunk_size, kmer_size, idt_treshold=97):
     """Perform an abundance greedy clustering on a sequences file.
 
     Args:
@@ -384,6 +387,7 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
         mincount (int): Minimun sequence occurrency accepted.
         chunk_size (int): Size of the chunks to be considered.
         kmer_size (int): Size of the k-mers to be considered.
+        idt_treshold (int): Identity percentage treshold.
 
     Returns:
         otu_list (list(str, int)): List of OTUs and their respective number
@@ -406,7 +410,7 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
 
         # If the sequence is less than 97% identical to all the others,
         # we have found a new OTU.
-        if all([identity <= 97 for identity in identities]):
+        if all([identity <= idt_treshold for identity in identities]):
             otu_list.append(element)
 
     return otu_list
@@ -451,13 +455,14 @@ def main():
     mincount = args.mincount
     chunk_size = args.chunk_size
     kmer_size = args.kmer_size
+    idt_treshold = args.identity_treshold
 
     # Output filename for OTU list
     output_file = args.output_file
 
     # Abundance Greedy Clustering on filtered non chimerics reads
     OTU_list = abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
-                                           chunk_size, kmer_size)
+                                           chunk_size, kmer_size, idt_treshold)
     print(f'Nb of OTUs found: {len(OTU_list)}')
     write_OTU(OTU_list, output_file)
 
