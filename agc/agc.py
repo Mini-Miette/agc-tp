@@ -14,13 +14,13 @@
 """OTU clustering"""
 
 from collections import Counter
+import time
 import argparse
 import sys
 import os
-import math
+#import math
 import gzip
 import statistics
-import numpy as np
 # https://github.com/briney/nwalign3
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
@@ -34,9 +34,6 @@ __version__ = "1.0.0"
 __maintainer__ = "Bénédicte Noblet et Laura Xénard"
 __email__ = "laura.xenard@protonmail.com"
 __status__ = "Developpement"
-
-
-parse = False
 
 
 def isfile(path):
@@ -107,44 +104,6 @@ def read_fasta(amplicon_file, minseqlen):
         if activeone and len(sequence) >= minseqlen:
             yield sequence
 
-# ===================================================================
-#         for line in my_file:
-#             sequence = ''
-#             while line[0] != '>':
-#                 sequence += line
-#                 line = next(my_file, None)
-#             if len(sequence) >= minseqlen:
-#                 print(sequence)
-#                 yield sequence
-# ===================================================================
-
-# ===================================================================
-#         for line in my_file:
-#             if line[0] != '>' and len(line) >= minseqlen:
-#                 yield line
-#
-# ===================================================================
-
-# ===================================================================
-# # Version Bénédicte mais trop de séquences (59)
-#         activeone = False
-#         sequence = ''
-#         for line in my_file:
-#             if str(line).startswith(">"):
-#                 if activeone:
-#                     activeone = False
-#                 else:
-#                     line = next(my_file, None)
-#                     sequence = str(line).strip()
-#                     activeone = True
-#             else:
-#                 if activeone:
-#                     sequence += str(line).strip()
-#                 else:
-#                     if len(sequence) >= minseqlen:
-#                         yield sequence
-# ===================================================================
-
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
     """Dereplicate an amplicon file.
@@ -167,13 +126,17 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
             seq_dict[seq] += 1
         else:
             seq_dict[seq] = 1
-    # print(seq_dict)
+    #print(seq_dict)
+    if not seq_dict:
+        sys.exit("No sequence meets minimum size requirement")
 
     # Yielding (sequence, count) in decreasing count order.
     for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
         if seq_dict[key] >= mincount:
+            #print(f"current sequence {key} ", seq_dict[key])
             yield (key, seq_dict[key])
         else:
+            #print(f"No more sequence meets minimum count requirement")
             break  # No need to go throught the rest it's ordered.
 
 
@@ -203,6 +166,8 @@ def get_chunks(sequence, chunk_size):
 
 def cut_kmer(sequence, kmer_size):
     """Cut sequence into kmers"""
+    #if sequence is None:
+    #    sys.exit(f"No sequence meets minimum count requirement")
     for i in range(0, len(sequence) - kmer_size + 1):
         yield sequence[i:i+kmer_size]
 
@@ -248,8 +213,8 @@ def search_mates(kmer_dict, sequence, kmer_size):
         if kmer not in kmer_dict:
             continue
         allfound += kmer_dict[kmer]
-    mostones = Counter(allfound).most_common(2)
-    return [mostones[i][0] for i in range(2)]
+    best_mates = Counter(allfound).most_common(2)
+    return [seq_id for seq_id, count in best_mates]
 
 
 def detect_chimera(perc_identity_matrix):
@@ -271,6 +236,80 @@ def detect_chimera(perc_identity_matrix):
     return ident_std_enough and diff_segments
 
 
+def align_them(sequence1, sequence2, gap_open=-1, gap_extend=-1):
+    """Handle nw.global_align easily.
+    Besides, avoid repetitions of matrix and options.
+    """
+    matrix_file = os.path.abspath(os.path.join(
+                                  os.path.dirname(__file__), "MATCH"))
+    return nw.global_align(sequence1, sequence2,
+                           gap_open=gap_open, gap_extend=gap_extend,
+                           matrix=matrix_file)
+
+
+def get_my_parents(current_segments, kmer_dict, kmer_size):
+    """Embedding a part of chimera_removal to fit pylint requirments.
+    Aim to identify parent sequences of current one using chunks.
+
+    Args:
+        current_segments(list(str)): fragments to study.
+        chunk_size (int): Size of the sequence chunks.
+        kmer_size (int): Size of the k-mers to be considered.
+    Return:
+        List: list of 2 parents sequences rank. Empty list if less.
+    """
+    closest = []
+    parents = []
+
+    # Compare to already identified non chimeric sequences.
+    for current_seg in current_segments:
+        best_mates = search_mates(kmer_dict, current_seg, kmer_size)
+        closest.append(best_mates)
+    # Perform some cleaning in parent list to keep only 2
+    for i in range(len(closest)-1):
+        for j in range(i, len(closest)):
+            candidate_parent = common(closest[i], closest[j])
+            parents += candidate_parent
+    unique_parents = set(parents)
+    if len(unique_parents) <= 2:
+        # Let's retrieve them
+        return list(unique_parents)
+    # else, sort them by decreasing order of importance
+    parent_counts = {}
+    for parent in unique_parents:
+        parent_counts[parent] = parents.count(parent)
+    parents_counts = sorted(parent_counts,
+                            key=parent_counts.get, reverse=True)
+    #print(f"Filled parent_counts variable is {parent_counts}")
+    #print(f"Keys are: {parent_counts.keys()}")
+    parents = list(parents_counts[:2])
+    #print(f"2 kept parents sequences: {parents}")
+    return parents
+
+
+def compute_my_identities(current_segments, parents, non_chimerics, chunk_size):
+    """Embedding a part of chimera_removal to fit pylint requirments.
+    Compute all identities for 2 parent sequences.
+
+    Args:
+        current_segments(list(str)): Chunk list for a sequence.
+        parents(list(int)): List of 2 identified best mates.
+        non_chimerics(list(tuple(str, int))):
+              Active list of non chimeral sequences.
+        chunk_size(int): Size of the sequence chunks.
+    """
+    identities = [[0.0,0.0] for current_seg in current_segments]
+    for rank, parent in enumerate(parents):
+        nc_segments = get_chunks(non_chimerics[parent][0], chunk_size)
+
+        pairs = zip(range(len(current_segments)),
+                          current_segments, nc_segments)
+        for number, current_seg, nc_seg in pairs:
+            aligns = align_them(current_seg, nc_seg)
+            identities[number][rank] = get_identity(aligns)
+    return identities
+
+
 def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     """Yield a generator of non chimeric sequences.
 
@@ -282,93 +321,50 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
         kmer_size (int): Size of the k-mers to be considered.
 
     Yields:
-        None.
+        non_chimera (string, int): Sequence and number of reads.
 
     """
-    matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                               "MATCH"))
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    non_chimerics = []  # Non chimeric sequences.
-    # The first 2 sequences are declared non chimeric by default. So we jump
-    # directly to the third one.
-    non_chimerics.append(next(reader, None))
-    non_chimerics.append(next(reader, None))
-    # We are going to build a k-mer dictionary making an inventory of all
-    # the non chimeric sequences k-mers.
-    # The dictionary needs to be initialized with those first sequences,
-    # then it will be updated each time a new non chimeric sequence is
-    # identified.
-    kmer_dict = get_unique_kmer({}, non_chimerics[0], 0, kmer_size)
-    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[1], 1, kmer_size)
+    non_chimerics = []  # Non chimeric sequences (nc), the ones we want.
 
+    # Create a k-mer dictionary to store nc sequences matching k-mers.
+    kmer_dict = {}
+
+    # The first 2 sequences are declared non chimeric by default.
+    for i in range(2):
+        seq_tuple = next(reader, None)
+        if seq_tuple is None:
+            sys.exit("No sequence meets minimum count requirement")
+        yield seq_tuple
+        non_chimerics.append(seq_tuple)
+        #print(non_chimerics)
+        kmer_dict = get_unique_kmer(kmer_dict,
+                                    non_chimerics[i][0], i, kmer_size)
+
+    # Operate on following sequence from reader
     for current_seq, current_count in reader:
-
-        parents = []  # Parent sequences to the current sequence.
-
-        # Splitting the sequence into non overlaping segments.
+        #print(current_seq, current_count)
+        if current_seq is None:
+            #print(f"No more sequence meets minimum count requirement")
+            break
         current_segments = get_chunks(current_seq, chunk_size)
+        parents = get_my_parents(current_segments, kmer_dict, kmer_size)
 
-        # We want to compare each segment to the corresponding segment of
-        # the nc (non chimeric) sequences.
-        for nc_seq, nc_count in non_chimerics:
-            nc_segments = get_chunks(nc_seq, chunk_size)
-            for current_seg, nc_seg in zip(current_segments, nc_segments):
+        # Less than 2 parents, not a chimera...
+        if len(parents) < 2:
+            continue
 
-                # We want to compare the k-mers of each segment so it's
-                # easier to first build a Counter to count the number
-                # of occurrencies of each k-mer in a segment.
-                current_seg_kmers_cnt = Counter()
-                kmer_reader = cut_kmer(current_seg, kmer_size)
-                for kmer in kmer_reader:
-                    current_seg_kmers_cnt[kmer] += 1
-                # We do the same for the non chimeric segment.
-                nc_seg_kmers_cnt = Counter()
-                kmer_reader = cut_kmer(nc_seg, kmer_size)
-                for kmer in kmer_reader:
-                    nc_seg_kmers_cnt[kmer] += 1
-
-                # How many identical k-mers do we have between the 2 segments?
-                # We look at the intersection between the 2 Counters.
-                shared_kmers = [key for key in current_seg_kmers_cnt
-                                if key in nc_seg_kmers_cnt]
-
-                if len(shared_kmers) > 1:
-                    # The segments share several k-mers. We have found a
-                    # parent sequence.
-                    parents.append((nc_seq, nc_count))
-                    break  # No need to check the other segments.
-                elif (len(shared_kmers) == 1
-                      and current_seg_kmers_cnt[shared_kmers[0]] > 1
-                      and nc_seg_kmers_cnt[shared_kmers[0]] > 1):
-                    # There's only one shared k-mer and it appears at least
-                    # twice in both segments. We have found a parent sequence.
-                    parents.append((nc_seq, nc_count))
-                    break  # No need to check the other segments.
-
-        if len(parents) >= 2:
-            # We use a np.array to hold all the identidy % between the
-            # current sequence and each parent sequence.
-            # The columns hold the sequences in the same order than the
-            # parents list. The rows hold the segments.
-            nb_segments = math.ceil(len(current_seq) / chunk_size)
-            identities = np.zeros((nb_segments, len(parents)))
-
-            for i in range(len(parents)):
-                parent_segments = get_chunks(parents[i], chunk_size)
-                aligns = [nw.global_align(current_seg, parent_seg,
-                                          gap_open=-1, gap_extend=-1,
-                                          matrix=matrix_file)
-                          for current_seg, parent_seg
-                          in zip(current_segments, parent_segments)]
-                identities[i, :] = [get_identity(aligns)]
-
-        # Updating the list of non chimeric sequences.
+        identities = compute_my_identities(current_segments, parents,
+                                           non_chimerics, chunk_size)
         is_chimeric = detect_chimera(identities)
-        if not is_chimeric:
-            non_chimerics.append((nc_seq, nc_count))
 
-    for seq, count in non_chimerics:
-        yield (seq, count)
+        # Updating the list and kmer dict of non chimeric sequences.
+        if not is_chimeric:
+            seqtuple = (current_seq, current_count)
+            yield seqtuple
+            non_chimerics.append(seqtuple)
+            kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[-1][0],
+                                        len(non_chimerics)-1, kmer_size)
 
 
 def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
@@ -387,29 +383,23 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
                                    of occurences.
 
     """
-    reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
-    matrix_file = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                               "MATCH"))
+    reader = chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size)
     otu_list = []
 
-    # We initialise with the sequence with the most abundance.
+    # We initialise with the most abundant sequence.
     otu_list.append(next(reader, None))
 
     for element in reader:
-        # print(element)
+        #print(element)
         identities = []
         for otu in otu_list:
-
-            # First we align the sequences.
-            align = nw.global_align(otu[0], element[0], gap_open=-1,
-                                    gap_extend=-1,
-                                    matrix=matrix_file)
-            # Then we compute the identity.
+            # Compute alignment identity.
+            align = align_them(otu[0], element[0])
             identities.append(get_identity(align))
 
         # If the sequence is less than 97% identical to all the others,
         # we have found a new OTU.
-        # print(identities)
+        #print(identities)
         if all([identity <= 97 for identity in identities]):
             #print('on ajoute')
             otu_list.append(element)
@@ -438,78 +428,39 @@ def write_OTU(OTU_list, output_file):
             my_out_file.write(f">OTU_{i+1} occurrence:{sequence[1]}\n")
             my_out_file.write(fill(sequence[0])+"\n")
 
+
 # ==============================================================
 # Main program
 # ==============================================================
-
 
 def main():
     """
     Main program function
     """
-    if parse:
-        # Get arguments
-        args = get_arguments()
-        amplicon_file = args.amplicon_file
-        minseqlen = args.minseqlen
-        mincount = args.mincount
-        chunk_size = args.chunk_size
-        kmer_size = args.kmer_size
-        output_file = args.output_file
-        # Votre programme ici
+    # Get arguments
+    args = get_arguments()
 
-    else:
-        amplicon_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/tests/test_sequences.fasta.gz'
-        minseqlen = 400
-        mincount = 10
-        chunk_size = 100
-        kmer_size = 8
-        output_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/output/test_output.txt'
+    # Reads and sizes parameters
+    amplicon_file = args.amplicon_file
+    minseqlen = args.minseqlen
+    mincount = args.mincount
+    chunk_size = args.chunk_size
+    kmer_size = args.kmer_size
 
-# =============================================================================
-#     reader = read_fasta(amplicon_file, 1)
-#     cpt = 0
-#     for seq in reader:
-#         # print(seq)
-#         cpt += 1
-#         # print('--')
-#     print(cpt)
-# =============================================================================
+    # Output filename for OTU list
+    output_file = args.output_file
 
-    #abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
-    chimera_removal(amplicon_file, 100, 1, 10, 4)
-
-# =============================================================================
-#     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
-#     derep_1 = next(dereplication_reader)
-#     derep_2 = next(dereplication_reader)
-#     # Should be the most abundant sequence: seq4 counted 5 times
-#     expected = "ACTACGGGGCGCAGCAGTAGGGAATCTTCCGCAATGGACGAAAGTCTGACGGAGCAACG"
-#     expected += "CCGCGTGTATGAAGAAGGTTTTCGGATCGTAAAGTACTGTTGTTAGAGAAGAACAAGG"
-#     expected += "ATAAGAGTAACTGCTTGTCCCTTGACGGTATCTAACCAGAAAGCCACGGCTAACTACG"
-#     expected += "TGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTGTCCGGAGTTAGTGGGCGTAA"
-#     expected += "AGCGCGCGCAGGCGGTCTTTTAAGTCTGATGTCAAAGCCCCCGGCTTAACCGGGGAGG"
-#     expected += "GTCATTGGAAACTGGAAGACTGGAGTGCAGAAGAGGAGAGTGGAATTCCACGTGTAGC"
-#     expected += "GGGTGAAATGCTAGATATGTGGAGGAACACCAGTGGCGAAGGCGACTCTCTGGTCTGT"
-#     expected += "AAACTGACGCTGAGGCGCGAAGCGTGGGGAGCAAA"
-#     assert(derep_1[0] == expected)
-#     assert(derep_1[1] == 5)
-#     # Should be the second most abundant sequence: seq3 counted 4 times
-#     expected = "TAGGGAATCTTCCGCAATGGGCGAAAGCCTGACGGAGCAACGCCGCGTGAGTGATGAA"
-#     expected += "GGTCTTCGGATCGTAAAACTCTGTTATTAGGGAAGAACATATGTGTAAGTAACTGTG"
-#     expected += "CACATCTTGACGGTACCTAATCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCG"
-#     expected += "GTAATACGTAGGTGGCAAGCGTTATCCGGAATTATTGGGCGTACAGCGCG"
-#     assert(derep_2[0] == expected)
-#     assert(derep_2[1] == 4)
-#     try:
-#         derep_3 = next(dereplication_reader)
-#         # derep_3 should be empty
-#         assert(len(derep_3) == 0)
-#     except StopIteration:
-#         # Congrats only two sequences to detect
-#         assert(True)
-# =============================================================================
+    # Abundance Greedy Clustering on filtered non chimerics reads
+    OTU_list = abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
+                                           chunk_size, kmer_size)
+    print(f'Nb of OTUs found: {len(OTU_list)}')
+    write_OTU(OTU_list, output_file)
 
 
 if __name__ == '__main__':
+
+    start_time = time.time()
     main()
+    end_time = time.time() - start_time
+    print(f'OTU search done in {end_time // 60:.0f} min'
+          f' {end_time % 60:.2f} s.')
