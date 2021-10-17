@@ -14,6 +14,7 @@
 """OTU clustering"""
 
 from collections import Counter
+import time
 import argparse
 import sys
 import os
@@ -33,9 +34,6 @@ __version__ = "1.0.0"
 __maintainer__ = "Bénédicte Noblet et Laura Xénard"
 __email__ = "laura.xenard@protonmail.com"
 __status__ = "Developpement"
-
-
-parse = False
 
 
 def isfile(path):
@@ -105,44 +103,6 @@ def read_fasta(amplicon_file, minseqlen):
                 sequence += str(line).strip()
         if activeone and len(sequence) >= minseqlen:
             yield sequence
-
-# ===================================================================
-#         for line in my_file:
-#             sequence = ''
-#             while line[0] != '>':
-#                 sequence += line
-#                 line = next(my_file, None)
-#             if len(sequence) >= minseqlen:
-#                 print(sequence)
-#                 yield sequence
-# ===================================================================
-
-# ===================================================================
-#         for line in my_file:
-#             if line[0] != '>' and len(line) >= minseqlen:
-#                 yield line
-#
-# ===================================================================
-
-# ===================================================================
-# # Version Bénédicte mais trop de séquences (59)
-#         activeone = False
-#         sequence = ''
-#         for line in my_file:
-#             if str(line).startswith(">"):
-#                 if activeone:
-#                     activeone = False
-#                 else:
-#                     line = next(my_file, None)
-#                     sequence = str(line).strip()
-#                     activeone = True
-#             else:
-#                 if activeone:
-#                     sequence += str(line).strip()
-#                 else:
-#                     if len(sequence) >= minseqlen:
-#                         yield sequence
-# ===================================================================
 
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
@@ -358,16 +318,16 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     reader = dereplication_fulllength(amplicon_file, minseqlen, mincount)
     non_chimerics = []  # Non chimeric sequences (nc), the ones we want.
 
+    # Create a k-mer dictionary to store nc sequences matching k-mers.
+    kmer_dict = {}
+
     # The first 2 sequences are declared non chimeric by default.
     for i in range(2):
         seq_tuple = next(reader, None)
         yield seq_tuple
         non_chimerics.append(seq_tuple)
-
-    # Create a k-mer dictionary to store nc sequences matching k-mers.
-    kmer_dict = {}
-    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[0], 0, kmer_size)
-    kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[1], 1, kmer_size)
+        kmer_dict = get_unique_kmer(kmer_dict,
+                                    non_chimerics[i], i, kmer_size)
 
     # Operate on following sequence from reader
     for current_seq, current_count in reader:
@@ -410,7 +370,7 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
     reader = chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size)
     otu_list = []
 
-    # We initialise with the sequence with the most abundance.
+    # We initialise with the most abundant sequence.
     otu_list.append(next(reader, None))
 
     for element in reader:
@@ -452,78 +412,39 @@ def write_OTU(OTU_list, output_file):
             my_out_file.write(f">OTU_{i+1} occurrence:{sequence[1]}\n")
             my_out_file.write(fill(sequence[0])+"\n")
 
+
 # ==============================================================
 # Main program
 # ==============================================================
-
 
 def main():
     """
     Main program function
     """
-    if parse:
-        # Get arguments
-        args = get_arguments()
-        amplicon_file = args.amplicon_file
-        minseqlen = args.minseqlen
-        mincount = args.mincount
-        chunk_size = args.chunk_size
-        kmer_size = args.kmer_size
-        output_file = args.output_file
-        # Votre programme ici
+    # Get arguments
+    args = get_arguments()
 
-    else:
-        amplicon_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/tests/test_sequences.fasta.gz'
-        minseqlen = 400
-        mincount = 10
-        chunk_size = 100
-        kmer_size = 8
-        output_file = '/home/laura/Documents/M2BI/Omiques/agc-tp/output/test_output.txt'
+    # Reads and sizes parameters
+    amplicon_file = args.amplicon_file
+    minseqlen = args.minseqlen
+    mincount = args.mincount
+    chunk_size = args.chunk_size
+    kmer_size = args.kmer_size
 
-# =============================================================================
-#     reader = read_fasta(amplicon_file, 1)
-#     cpt = 0
-#     for seq in reader:
-#         # print(seq)
-#         cpt += 1
-#         # print('--')
-#     print(cpt)
-# =============================================================================
+    # Output filename for OTU list
+    output_file = args.output_file
 
-    #abundance_greedy_clustering(amplicon_file, 200, 1, chunk_size, kmer_size)
-    chimera_removal(amplicon_file, 100, 1, 10, 4)
-
-# =============================================================================
-#     dereplication_reader = dereplication_fulllength(amplicon_file, 200, 3)
-#     derep_1 = next(dereplication_reader)
-#     derep_2 = next(dereplication_reader)
-#     # Should be the most abundant sequence: seq4 counted 5 times
-#     expected = "ACTACGGGGCGCAGCAGTAGGGAATCTTCCGCAATGGACGAAAGTCTGACGGAGCAACG"
-#     expected += "CCGCGTGTATGAAGAAGGTTTTCGGATCGTAAAGTACTGTTGTTAGAGAAGAACAAGG"
-#     expected += "ATAAGAGTAACTGCTTGTCCCTTGACGGTATCTAACCAGAAAGCCACGGCTAACTACG"
-#     expected += "TGCCAGCAGCCGCGGTAATACGTAGGTGGCAAGCGTTGTCCGGAGTTAGTGGGCGTAA"
-#     expected += "AGCGCGCGCAGGCGGTCTTTTAAGTCTGATGTCAAAGCCCCCGGCTTAACCGGGGAGG"
-#     expected += "GTCATTGGAAACTGGAAGACTGGAGTGCAGAAGAGGAGAGTGGAATTCCACGTGTAGC"
-#     expected += "GGGTGAAATGCTAGATATGTGGAGGAACACCAGTGGCGAAGGCGACTCTCTGGTCTGT"
-#     expected += "AAACTGACGCTGAGGCGCGAAGCGTGGGGAGCAAA"
-#     assert(derep_1[0] == expected)
-#     assert(derep_1[1] == 5)
-#     # Should be the second most abundant sequence: seq3 counted 4 times
-#     expected = "TAGGGAATCTTCCGCAATGGGCGAAAGCCTGACGGAGCAACGCCGCGTGAGTGATGAA"
-#     expected += "GGTCTTCGGATCGTAAAACTCTGTTATTAGGGAAGAACATATGTGTAAGTAACTGTG"
-#     expected += "CACATCTTGACGGTACCTAATCAGAAAGCCACGGCTAACTACGTGCCAGCAGCCGCG"
-#     expected += "GTAATACGTAGGTGGCAAGCGTTATCCGGAATTATTGGGCGTACAGCGCG"
-#     assert(derep_2[0] == expected)
-#     assert(derep_2[1] == 4)
-#     try:
-#         derep_3 = next(dereplication_reader)
-#         # derep_3 should be empty
-#         assert(len(derep_3) == 0)
-#     except StopIteration:
-#         # Congrats only two sequences to detect
-#         assert(True)
-# =============================================================================
+    # Abundance Greedy Clustering on filtered non chimerics reads
+    OTU_list = abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
+                                           chunk_size, kmer_size)
+    print(f'Nb of OTUs found: {len(OTU_list)}')
+    write_OTU(OTU_list, output_file)
 
 
 if __name__ == '__main__':
+
+    start_time = time.time()
     main()
+    end_time = time.time() - start_time
+    print(f'OTU search done in {end_time // 60:.0f} min'
+          f' {end_time % 60:.2f} s.')
