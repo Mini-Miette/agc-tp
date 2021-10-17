@@ -18,9 +18,9 @@ import time
 import argparse
 import sys
 import os
-#import math
 import gzip
 import statistics
+from tqdm import tqdm
 # https://github.com/briney/nwalign3
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
@@ -57,18 +57,23 @@ def get_arguments():
     # Parsing arguments
     parser = argparse.ArgumentParser(description=__doc__,
                                      usage=f"{sys.argv[0]} -h")
-    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file', type=isfile, required=True,
+    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file',
+                        type=isfile, required=True,
                         help="Amplicon is a compressed fasta file (.fasta.gz)")
-    parser.add_argument('-s', '-minseqlen', dest='minseqlen', type=int, default=400,
+    parser.add_argument('-s', '-minseqlen', dest='minseqlen',
+                        type=int, default=400,
                         help="Minimum sequence length for dereplication (default 400)")
-    parser.add_argument('-m', '-mincount', dest='mincount', type=int, default=10,
+    parser.add_argument('-m', '-mincount', dest='mincount',
+                        type=int, default=10,
                         help="Minimum count for dereplication  (default 10)")
-    parser.add_argument('-c', '-chunk_size', dest='chunk_size', type=int, default=100,
+    parser.add_argument('-c', '-chunk_size', dest='chunk_size',
+                        type=int, default=100,
                         help="Chunk size for dereplication  (default 100)")
-    parser.add_argument('-k', '-kmer_size', dest='kmer_size', type=int, default=8,
+    parser.add_argument('-k', '-kmer_size', dest='kmer_size',
+                        type=int, default=8,
                         help="kmer size for dereplication  (default 10)")
-    parser.add_argument('-o', '-output_file', dest='output_file', type=str,
-                        default="OTU.fasta", help="Output file")
+    parser.add_argument('-o', '-output_file', dest='output_file',
+                        type=str, default="OTU.fasta", help="Output file")
     return parser.parse_args()
 
 
@@ -86,7 +91,7 @@ def read_fasta(amplicon_file, minseqlen):
     iterator
         An iterator operating on reads
     """
-    # Version Bénédicte mais ne prend pas la dernière séquence.
+
     with gzip.open(amplicon_file, 'rt') as my_file:
 
         activeone = False
@@ -118,6 +123,8 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
         int: Number of occurrences of the sequence.
 
     """
+    global NB_SEQUENCES
+
     # Building the dictionary.
     seq_dict = {}
     fasta_reader = read_fasta(amplicon_file, minseqlen)
@@ -126,17 +133,20 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
             seq_dict[seq] += 1
         else:
             seq_dict[seq] = 1
-    #print(seq_dict)
     if not seq_dict:
         sys.exit("No sequence meets minimum size requirement")
+
+    # Getting the number of 'good' sequences for progress bar.
+    NB_SEQUENCES = 0
+    for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
+        if seq_dict[key] >= mincount:
+            NB_SEQUENCES += 1
 
     # Yielding (sequence, count) in decreasing count order.
     for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
         if seq_dict[key] >= mincount:
-            #print(f"current sequence {key} ", seq_dict[key])
             yield (key, seq_dict[key])
         else:
-            #print(f"No more sequence meets minimum count requirement")
             break  # No need to go throught the rest it's ordered.
 
 
@@ -157,8 +167,8 @@ def get_chunks(sequence, chunk_size):
     """
     len_seq = len(sequence)
     if len_seq < chunk_size * 4:
-        raise ValueError(f"Sequence length ({len_seq}) is too short to be splitted in 4"
-                         f" chunks of size {chunk_size}")
+        raise ValueError(f"Sequence length ({len_seq}) is too short "
+                         f"to be splitted in 4 chunks of size {chunk_size}")
     return [sequence[i:i+chunk_size]
             for i in range(0, len_seq, chunk_size)
             if i+chunk_size <= len_seq - 1]
@@ -166,8 +176,6 @@ def get_chunks(sequence, chunk_size):
 
 def cut_kmer(sequence, kmer_size):
     """Cut sequence into kmers"""
-    #if sequence is None:
-    #    sys.exit(f"No sequence meets minimum count requirement")
     for i in range(0, len(sequence) - kmer_size + 1):
         yield sequence[i:i+kmer_size]
 
@@ -219,20 +227,23 @@ def search_mates(kmer_dict, sequence, kmer_size):
 
 def detect_chimera(perc_identity_matrix):
     """Detecting chimera sequences.
-    Si l’écart type moyen des pourcentages d’identité des segments est supérieur à 5
-    et que 2 segments minimum de notre séquence montrent une similarité différente
-    à un des deux parents, nous identifierons cette séquence comme chimérique.
+    Si l’écart type moyen des pourcentages d’identité des segments est
+    supérieur à 5 et que 2 segments minimum de notre séquence montrent une
+    similarité différente à un des deux parents, nous identifierons cette
+    séquence comme chimérique.
     """
-    # Standard deviations mean is expected above 5.0
+    # Standard deviations mean is expected above 5.0.
     std_devs = [statistics.stdev(values) for values in perc_identity_matrix]
     ident_std_enough = statistics.mean(std_devs) > 5
 
-    # Either [0,0,0,0] nor [1,1,1,1] are not wanted for below list, not chimeral reads
+    # Either [0,0,0,0] nor [1,1,1,1] are not wanted for below list,
+    # not chimeral reads.
     fragment_max_pos = [0 if values[0] == max(values) else 1
                                        for values in perc_identity_matrix]
-    diff_segments = not (sum(fragment_max_pos) == 0 or sum(fragment_max_pos) == 4)
+    diff_segments = not (sum(fragment_max_pos) == 0
+                         or sum(fragment_max_pos) == 4)
 
-    # final answer requires both boolean to be True
+    # Final answer requires both boolean to be True.
     return ident_std_enough and diff_segments
 
 
@@ -265,25 +276,22 @@ def get_my_parents(current_segments, kmer_dict, kmer_size):
     for current_seg in current_segments:
         best_mates = search_mates(kmer_dict, current_seg, kmer_size)
         closest.append(best_mates)
-    # Perform some cleaning in parent list to keep only 2
+    # Perform some cleaning in parent list to keep only 2.
     for i in range(len(closest)-1):
         for j in range(i, len(closest)):
             candidate_parent = common(closest[i], closest[j])
             parents += candidate_parent
     unique_parents = set(parents)
     if len(unique_parents) <= 2:
-        # Let's retrieve them
+        # Let's retrieve them.
         return list(unique_parents)
-    # else, sort them by decreasing order of importance
+    # Else, sort them by decreasing order of importance.
     parent_counts = {}
     for parent in unique_parents:
         parent_counts[parent] = parents.count(parent)
     parents_counts = sorted(parent_counts,
                             key=parent_counts.get, reverse=True)
-    #print(f"Filled parent_counts variable is {parent_counts}")
-    #print(f"Keys are: {parent_counts.keys()}")
     parents = list(parents_counts[:2])
-    #print(f"2 kept parents sequences: {parents}")
     return parents
 
 
@@ -337,15 +345,14 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
             sys.exit("No sequence meets minimum count requirement")
         yield seq_tuple
         non_chimerics.append(seq_tuple)
-        #print(non_chimerics)
         kmer_dict = get_unique_kmer(kmer_dict,
                                     non_chimerics[i][0], i, kmer_size)
 
-    # Operate on following sequence from reader
-    for current_seq, current_count in reader:
-        #print(current_seq, current_count)
+    # Operate on following sequence from reader.
+    for current_seq, current_count in tqdm(reader, unit='seq',
+                                           total=(NB_SEQUENCES-2)):
         if current_seq is None:
-            #print(f"No more sequence meets minimum count requirement")
+            # No more sequence meets minimum count requirement.
             break
         current_segments = get_chunks(current_seq, chunk_size)
         parents = get_my_parents(current_segments, kmer_dict, kmer_size)
@@ -383,14 +390,14 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
                                    of occurences.
 
     """
-    reader = chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size)
+    reader = chimera_removal(amplicon_file, minseqlen, mincount, chunk_size,
+                             kmer_size)
     otu_list = []
 
     # We initialise with the most abundant sequence.
     otu_list.append(next(reader, None))
 
     for element in reader:
-        #print(element)
         identities = []
         for otu in otu_list:
             # Compute alignment identity.
@@ -399,12 +406,9 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
 
         # If the sequence is less than 97% identical to all the others,
         # we have found a new OTU.
-        #print(identities)
         if all([identity <= 97 for identity in identities]):
-            #print('on ajoute')
             otu_list.append(element)
 
-    # print(otu_list)
     return otu_list
 
 
@@ -437,6 +441,7 @@ def main():
     """
     Main program function
     """
+
     # Get arguments
     args = get_arguments()
 
