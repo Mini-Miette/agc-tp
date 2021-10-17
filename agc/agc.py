@@ -126,13 +126,17 @@ def dereplication_fulllength(amplicon_file, minseqlen, mincount):
             seq_dict[seq] += 1
         else:
             seq_dict[seq] = 1
-    # print(seq_dict)
+    #print(seq_dict)
+    if not seq_dict:
+        sys.exit("No sequence meets minimum size requirement")
 
     # Yielding (sequence, count) in decreasing count order.
     for key in sorted(seq_dict, key=seq_dict.get, reverse=True):
         if seq_dict[key] >= mincount:
+            #print(f"current sequence {key} ", seq_dict[key])
             yield (key, seq_dict[key])
         else:
+            #print(f"No more sequence meets minimum count requirement")
             break  # No need to go throught the rest it's ordered.
 
 
@@ -162,6 +166,8 @@ def get_chunks(sequence, chunk_size):
 
 def cut_kmer(sequence, kmer_size):
     """Cut sequence into kmers"""
+    #if sequence is None:
+    #    sys.exit(f"No sequence meets minimum count requirement")
     for i in range(0, len(sequence) - kmer_size + 1):
         yield sequence[i:i+kmer_size]
 
@@ -274,7 +280,10 @@ def get_my_parents(current_segments, kmer_dict, kmer_size):
         parent_counts[parent] = parents.count(parent)
     parents_counts = sorted(parent_counts,
                             key=parent_counts.get, reverse=True)
-    parents = list(parents_counts.keys())[:2]
+    #print(f"Filled parent_counts variable is {parent_counts}")
+    #print(f"Keys are: {parent_counts.keys()}")
+    parents = list(parents_counts[:2])
+    #print(f"2 kept parents sequences: {parents}")
     return parents
 
 
@@ -324,13 +333,20 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
     # The first 2 sequences are declared non chimeric by default.
     for i in range(2):
         seq_tuple = next(reader, None)
+        if seq_tuple is None:
+            sys.exit("No sequence meets minimum count requirement")
         yield seq_tuple
         non_chimerics.append(seq_tuple)
+        #print(non_chimerics)
         kmer_dict = get_unique_kmer(kmer_dict,
-                                    non_chimerics[i], i, kmer_size)
+                                    non_chimerics[i][0], i, kmer_size)
 
     # Operate on following sequence from reader
     for current_seq, current_count in reader:
+        #print(current_seq, current_count)
+        if current_seq is None:
+            #print(f"No more sequence meets minimum count requirement")
+            break
         current_segments = get_chunks(current_seq, chunk_size)
         parents = get_my_parents(current_segments, kmer_dict, kmer_size)
 
@@ -347,7 +363,7 @@ def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
             seqtuple = (current_seq, current_count)
             yield seqtuple
             non_chimerics.append(seqtuple)
-            kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[-1],
+            kmer_dict = get_unique_kmer(kmer_dict, non_chimerics[-1][0],
                                         len(non_chimerics)-1, kmer_size)
 
 
@@ -374,7 +390,7 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
     otu_list.append(next(reader, None))
 
     for element in reader:
-        # print(element)
+        #print(element)
         identities = []
         for otu in otu_list:
             # Compute alignment identity.
@@ -383,7 +399,7 @@ def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
 
         # If the sequence is less than 97% identical to all the others,
         # we have found a new OTU.
-        # print(identities)
+        #print(identities)
         if all([identity <= 97 for identity in identities]):
             #print('on ajoute')
             otu_list.append(element)
