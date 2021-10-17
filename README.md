@@ -5,12 +5,15 @@ Vous trouverez la description complète du TP [ici](https://docs.google.com/docu
 ## Résultats
 
 Pytest :
+
 ![](/results/pytest.png)
 
 Exécution :
+
 ![](/results/execution.png)
 
 vsearch :
+
 ![](/results/vsearch.png)
 
 
